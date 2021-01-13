@@ -13,7 +13,10 @@ from safedelete.models import (
 )
 from jsonfield import JSONField
 from requests.exceptions import RequestException
+
+from officehours_api.exceptions import BackendException, DisabledBackendException
 from officehours_api import backends
+from officehours_api.backends.types import IMPLEMENTED_BACKEND_NAME
 
 BACKEND_INSTANCES = {
     backend_name: getattr(getattr(backends, backend_name), 'Backend')()
@@ -21,15 +24,19 @@ BACKEND_INSTANCES = {
 }
 
 
-class BackendException(Exception):
-    def __init__(self, backend_type):
-        self.backend_type = backend_type
-        self.message = (
-            f'An unexpected error occurred in {self.backend_type.capitalize()}. '
-            f'You can check the ITS Status page (https://status.its.umich.edu/) '
-            f'to see if there is a known issue with {self.backend_type.capitalize()}, '
-            f'or contact the ITS Service Center (https://its.umich.edu/help) for help.'
-        )
+def get_default_backend():
+    return settings.DEFAULT_BACKEND
+
+
+def get_default_allowed_backends():
+    return settings.DEFAULT_ALLOWED_BACKENDS
+
+
+def get_backend_types():
+    return [
+        [key, value.friendly_name]
+        for key, value in BACKEND_INSTANCES.items()
+    ]
 
 
 class Profile(models.Model):
@@ -59,16 +66,6 @@ def get_users_with_emails(manager: models.Manager):
         .exclude(profile__phone_number__exact='')
 
 
-def get_default_allowed_backends():
-    return settings.DEFAULT_ALLOWED_BACKENDS
-
-
-def get_backend_types():
-    return [
-        [key, value.friendly_name]
-        for key, value in BACKEND_INSTANCES.items()
-    ]
-
 class Queue(SafeDeleteModel):
     _safedelete_policy = SOFT_DELETE_CASCADE
     name = models.CharField(max_length=100)
@@ -96,13 +93,14 @@ class Queue(SafeDeleteModel):
     def hosts_with_phone_numbers(self):
         return get_users_with_emails(self.hosts)
 
+    def remove_allowed_backend(self, backend_name: IMPLEMENTED_BACKEND_NAME):
+        new_allowed_backends = list(filter(lambda x: x != backend_name, self.allowed_backends))
+        if len(new_allowed_backends) == 0:
+            new_allowed_backends.append(get_default_backend())
+        self.allowed_backends = new_allowed_backends
+
     def __str__(self):
         return self.name
-
-
-def get_default_backend():
-    return settings.DEFAULT_BACKEND
-
 
 
 class MeetingStatus(Enum):
@@ -137,11 +135,14 @@ class Meeting(SafeDeleteModel):
     def attendees_with_phone_numbers(self):
         return get_users_with_emails(self.attendees)
 
+    def change_backend_type(self, new_backend_name: Optional[IMPLEMENTED_BACKEND_NAME] = None):
+        self.backend_type = new_backend_name if new_backend_name else get_default_backend()
+
     def __init__(self, *args, **kwargs):
         super(Meeting, self).__init__(*args, **kwargs)
-        self._original_backend_type = self.backend_type
-        self._original_assignee = self.assignee
-        self._original_status = self.status
+        self._saved_backend_type = self.backend_type
+        self._saved_assignee = self.assignee
+        self.saved_status = self.status
 
     @property
     def status(self):
@@ -153,12 +154,12 @@ class Meeting(SafeDeleteModel):
             else MeetingStatus.STARTED
         )
 
-    def start(self, assignee=None):
-        if assignee:
-            self.assignee = assignee
+    def start(self):
         if not self.assignee:
             raise Exception("Can't start meeting before assignee is set!")
-        backend = BACKEND_INSTANCES[self.backend_type]
+        backend = BACKEND_INSTANCES.get(self.backend_type)
+        if not backend:
+            raise DisabledBackendException(self.backend_type)
         try:
             self.backend_metadata = backend.save_user_meeting(
                 self.backend_metadata,
@@ -168,13 +169,15 @@ class Meeting(SafeDeleteModel):
             raise BackendException(self.backend_type) from ex
 
     def save(self, *args, **kwargs):
-        if self.backend_type != self._original_backend_type:
-            if self.status == MeetingStatus.STARTED:
+        if self.saved_status.value >= MeetingStatus.STARTED.value:
+            if self.backend_type != self._saved_backend_type:
                 raise Exception("Can't change backend_type once meeting is started!")
-        if self.assignee != self._original_assignee:
-            if self.status == MeetingStatus.STARTED:
+            if self.assignee != self._saved_assignee:
                 raise Exception("Can't change assignee once meeting is started!")
         super().save(*args, **kwargs)
+        self.saved_status = self.status
+        self._saved_backend_type = self.backend_type
+        self._saved_assignee = self.assignee
 
     def delete(self, *args, **kwargs):
         # Trigger m2m "remove" signals for attendees

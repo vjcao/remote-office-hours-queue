@@ -4,6 +4,7 @@ from django.http import Http404
 from django.urls import reverse
 
 from officehours_api import backends
+from officehours_api.backends.types import IMPLEMENTED_BACKEND_NAME
 
 BACKEND_CLASSES = {
     backend_name: getattr(getattr(backends, backend_name), 'Backend')
@@ -31,11 +32,12 @@ class AuthPromptView(TemplateView):
             raise Http404(f"Backend {backend_name} does not exist.")
         except AttributeError:
             raise Http404(f"Backend {backend_name} does not use three-legged OAuth2.")
-        context['backend_name'] = backend_name
+        context['backend_friendly_name'] = BACKEND_CLASSES[backend_name].friendly_name
+        context['backend_sign_in_help'] = getattr(BACKEND_CLASSES[backend_name], "sign_in_help") or ""
         return context
 
 
-def auth_callback_view(request, backend_name: str):
+def auth_callback_view(request, backend_name: IMPLEMENTED_BACKEND_NAME):
     try:
         auth_callback = BACKEND_CLASSES[backend_name].auth_callback
     except KeyError:

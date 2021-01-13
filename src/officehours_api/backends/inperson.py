@@ -1,11 +1,13 @@
 from django.contrib.auth.models import User
 
-from officehours_api.backends.backend_dict import BackendDict
+from officehours_api.backends.types import BackendDict, IMPLEMENTED_BACKEND_NAME
 
 
 class Backend:
-    name = 'inperson'
+    name: IMPLEMENTED_BACKEND_NAME = 'inperson'
     friendly_name = "In Person"
+    enabled = True
+
     docs_url = None
     telephone_num = None
     intl_telephone_url = None
@@ -18,6 +20,7 @@ class Backend:
         return {
             'name': cls.name,
             'friendly_name': cls.friendly_name,
+            'enabled': cls.enabled,
             'docs_url': cls.docs_url,
             'telephone_num': cls.telephone_num,
             'intl_telephone_url': cls.intl_telephone_url

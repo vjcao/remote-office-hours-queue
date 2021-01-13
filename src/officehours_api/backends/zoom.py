@@ -1,18 +1,15 @@
-from typing import List, Literal, Optional, TypedDict
+from typing import List, Literal, TypedDict
 from base64 import b64encode
 from time import time
 from datetime import datetime
-import json
 import logging
 
 import requests
 from django.contrib.auth.models import User
-from django.contrib.sites.models import Site
 from django.conf import settings
-from django.urls import reverse
 from django.shortcuts import redirect
 
-from officehours_api.backends.backend_dict import BackendDict
+from officehours_api.backends.types import BackendDict, IMPLEMENTED_BACKEND_NAME
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +28,7 @@ class ZoomMeeting(TypedDict):
     created_at: str
     agenda: str
     start_url: str
+    join_url: str
 
 
 class ZoomUser(TypedDict):
@@ -71,13 +69,17 @@ class ZoomAccessToken(TypedDict):
 
 
 class Backend:
-    name: str = 'zoom'
+    name: IMPLEMENTED_BACKEND_NAME = 'zoom'
     friendly_name: str = 'Zoom'
+    enabled: bool = name in settings.ENABLED_BACKENDS
+
     docs_url: str = settings.ZOOM_DOCS_URL
     telephone_num: str = settings.ZOOM_TELE_NUM
     intl_telephone_url: str = settings.ZOOM_INTL_URL
+    sign_in_help: str = settings.ZOOM_SIGN_IN_HELP
 
     base_url = 'https://zoom.us'
+    base_domain_url = settings.ZOOM_BASE_DOMAIN_URL
     expiry_buffer_seconds = 60
     client_id = settings.ZOOM_CLIENT_ID
     client_secret = settings.ZOOM_CLIENT_SECRET
@@ -155,6 +157,9 @@ class Backend:
                 'topic': 'Remote Office Hours Queue Meeting',
                 'start_time': datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ'),
                 'timezone': 'America/Detroit',
+                "settings": {
+                    "join_before_host": False,
+                },
             },
         )
         resp.raise_for_status()
@@ -180,6 +185,7 @@ class Backend:
             'meeting_id': meeting['id'],
             'numeric_meeting_id': meeting['id'],
             'meeting_url': meeting['join_url'],
+            'host_meeting_url': f"{cls.base_domain_url}/s/{meeting['id']}",
         })
         return backend_metadata
 
@@ -221,6 +227,7 @@ class Backend:
         return {
             'name': cls.name,
             'friendly_name': cls.friendly_name,
+            'enabled': cls.enabled,
             'docs_url': cls.docs_url,
             'telephone_num': cls.telephone_num,
             'intl_telephone_url': cls.intl_telephone_url

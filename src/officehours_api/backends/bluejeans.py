@@ -6,7 +6,7 @@ from rest_framework.exceptions import ValidationError
 from django.conf import settings
 from django.contrib.auth.models import User
 
-from officehours_api.backends.backend_dict import BackendDict
+from officehours_api.backends.types import BackendDict, IMPLEMENTED_BACKEND_NAME
 
 
 class BluejeansUserExtraFields(TypedDict):
@@ -129,8 +129,10 @@ class BluejeansClient:
 
 
 class Backend:
-    name: str = 'bluejeans'
+    name: IMPLEMENTED_BACKEND_NAME = 'bluejeans'
     friendly_name: str = 'BlueJeans'
+    enabled: bool = name in settings.ENABLED_BACKENDS
+
     docs_url: str = settings.BLUEJEANS_DOCS_URL
     telephone_num: str = settings.BLUEJEANS_TELE_NUM
     intl_telephone_url: str = settings.BLUEJEANS_INTL_URL
@@ -174,11 +176,13 @@ class Backend:
                 'endPointVersion': '2.10',
             }
         )
+        meeting_url = f'https://bluejeans.com/{meeting["numericMeetingId"]}'
         backend_metadata.update({
             'user_id': bj_user['id'],
             'meeting_id': meeting['id'],
             'numeric_meeting_id': meeting['numericMeetingId'],
-            'meeting_url': f'https://bluejeans.com/{meeting["numericMeetingId"]}',
+            'meeting_url': meeting_url,
+            'host_meeting_url': meeting_url,
         })
         return backend_metadata
 
@@ -187,11 +191,12 @@ class Backend:
         return {
             'name': cls.name,
             'friendly_name': cls.friendly_name,
+            'enabled': cls.enabled,
             'docs_url': cls.docs_url,
             'telephone_num': cls.telephone_num,
             'intl_telephone_url': cls.intl_telephone_url
         }
-    
+
     @classmethod
     def is_authorized(cls, user: User) -> bool:
         return True

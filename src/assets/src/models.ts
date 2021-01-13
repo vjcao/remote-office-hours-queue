@@ -5,6 +5,7 @@ export const VideoBackendNames: EnabledBackendName[] = ['zoom', 'bluejeans'];
 export interface MeetingBackend {
     name: EnabledBackendName;
     friendly_name: string;
+    enabled: boolean;
     docs_url: string | null;
     telephone_num: string | null;
     intl_telephone_url: string | null;
@@ -32,6 +33,7 @@ export interface BluejeansMetadata {
     user_id: number;
     meeting_id: number;
     meeting_url: string;
+    host_meeting_url: string;
     numeric_meeting_id: string;  // Number for dial-in / URL
 }
 

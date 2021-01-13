@@ -3,7 +3,7 @@ from typing import TypedDict, Literal
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.db.models import QuerySet
-from officehours_api.models import Queue, Meeting, Attendee, Profile
+from officehours_api.models import Queue, Meeting, MeetingStatus, Attendee
 
 
 class UserContext(TypedDict):
@@ -154,7 +154,7 @@ class QueueAttendeeSerializer(serializers.ModelSerializer):
                   'allowed_backends']
 
     def get_line_length(self, obj):
-        return obj.meeting_set.count()
+        return len([meeting for meeting in obj.meeting_set.all() if meeting.status != MeetingStatus.STARTED])
 
     def get_my_meeting(self, obj):
         user = self.context['user']
@@ -257,3 +257,13 @@ class MeetingSerializer(serializers.ModelSerializer):
         ):
             raise serializers.ValidationError(f'Queue {queue} is closed.')
         return queue
+
+    def validate(self, attrs):
+        '''
+        Ensure the assignee is a host.
+        '''
+        queue = self.instance.queue if self.instance else attrs["queue"]
+        hosts = queue.hosts.all()
+        if attrs.get("assignee") and attrs["assignee"] not in hosts:
+            raise serializers.ValidationError("Assignee must be a host!")
+        return attrs

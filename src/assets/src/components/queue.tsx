@@ -10,10 +10,10 @@ import {
     User, VideoBackendNames, ZoomMetadata
 } from "../models";
 import {
-    checkForbiddenError, BlueJeansDialInMessage, Breadcrumbs, DateTimeDisplay, DialInMessageProps,
-    DisabledMessage, EditToggleField, ErrorDisplay, FormError, JoinedQueueAlert, LoadingDisplay, LoginDialog,
-    showConfirmation, StatelessInputGroupForm, ZoomDialInMessage
+    checkForbiddenError, Breadcrumbs, DateTimeDisplay, DisabledMessage, EditToggleField, ErrorDisplay,
+    FormError, JoinedQueueAlert, LoadingDisplay, LoginDialog, showConfirmation, StatelessInputGroupForm
 } from "./common";
+import { DialInContent } from "./dialIn";
 import { BackendSelector, getBackendByName } from "./meetingType";
 import { PageProps } from "./page";
 import { usePromise } from "../hooks/usePromise";
@@ -132,7 +132,7 @@ const WaitingTurnAlert = (props: WaitingTurnAlertProps) => {
         ? "It's not your turn yet, but the host may be ready for you at any time."
         : "You're up next, but the host isn't quite ready for you.";
     return (
-        <Alert variant={props.placeInLine > 0 ? 'warning' : 'success'}>
+        <Alert variant="warning">
             {placeBeginning} Pay attention to this page {typeEnding}
         </Alert>
     );
@@ -151,24 +151,9 @@ const VideoMeetingInfo: React.FC<VideoMeetingInfoProps> = (props) => {
             target='_blank'
             className='card-link'
         >
-            How to use {props.backend.friendly_name} at U-M
+            Getting Started with {props.backend.friendly_name} at U-M
         </a>
     );
-
-    let dialInMessage;
-    if (props.metadata.numeric_meeting_id) {
-        const dialInProps = {
-            phone: props.backend.telephone_num,
-            meetingNumber: props.metadata.numeric_meeting_id,
-            intlNumbersURL: props.backend.intl_telephone_url
-        } as DialInMessageProps;
-
-        dialInMessage = props.backend.name === 'zoom'
-            ? <ZoomDialInMessage {...dialInProps} />
-            : props.backend.name === 'bluejeans'
-                ? <BlueJeansDialInMessage {...dialInProps} />
-                : null;
-    }
 
     return (
         <>
@@ -185,18 +170,14 @@ const VideoMeetingInfo: React.FC<VideoMeetingInfoProps> = (props) => {
                     </Card.Body>
                 </Card>
             </Col>
-            {
-                dialInMessage && (
-                    <Col md={6} sm={true}>
-                        <Card>
-                            <Card.Body>
-                                <Card.Title className='mt-0'>Having Trouble with Video?</Card.Title>
-                                <Card.Text>{dialInMessage}</Card.Text>
-                            </Card.Body>
-                        </Card>
-                    </Col>
-                )
-            }
+            <Col md={6} sm={true}>
+                <Card>
+                    <Card.Body>
+                        <Card.Title className='mt-0'>Having Trouble with Video?</Card.Title>
+                        <Card.Text><DialInContent {...props} /></Card.Text>
+                    </Card.Body>
+                </Card>
+            </Col>
         </Row>
         </>
     );
@@ -207,7 +188,6 @@ function QueueAttendingJoined(props: QueueAttendingProps) {
     const meeting = props.queue.my_meeting!;
     const meetingBackend = getBackendByName(meeting.backend_type, props.backends);
     const isVideoMeeting = VideoBackendNames.includes(meetingBackend.name);
-    const numberInLine = meeting.line_place !== null ? meeting.line_place + 1 : null;
     const inProgress = meeting.status === MeetingStatus.STARTED;
 
     // Alerts and head
@@ -219,9 +199,9 @@ function QueueAttendingJoined(props: QueueAttendingProps) {
             </Alert>
         );
 
-    const turnAlert = (inProgress && numberInLine === null)
-        ? <MeetingReadyAlert meetingType={meetingBackend.name} />
-        : <WaitingTurnAlert meetingType={meetingBackend.name} placeInLine={numberInLine!}/>;
+    const turnAlert = meeting.line_place !== null
+        ? <WaitingTurnAlert meetingType={meetingBackend.name} placeInLine={meeting.line_place} />
+        : <MeetingReadyAlert meetingType={meetingBackend.name} />;
 
     const headText = inProgress ? 'Your meeting is in progress.' : 'You are currently in line.';
 
@@ -230,7 +210,7 @@ function QueueAttendingJoined(props: QueueAttendingProps) {
         ? <small className="ml-2">(A Host has been assigned to this meeting. Meeting Type can no longer be changed.)</small>
         : <Button variant='link' onClick={props.onShowDialog} aria-label='Change Meeting Type' disabled={props.disabled}>Change</Button>;
 
-    const notificationBlurb = (numberInLine !== null && numberInLine > 1)
+    const notificationBlurb = !inProgress
         && (
             <Alert variant="info">
                 <small>
@@ -315,7 +295,7 @@ function QueueAttendingJoined(props: QueueAttendingProps) {
         <h3>{headText}</h3>
         <Card className='card-middle card-width center-align'>
             <Card.Body>
-                {!inProgress && <Card.Text><strong>Your Number in Line</strong>: {numberInLine}</Card.Text>}
+                {meeting.line_place !== null && <Card.Text><strong>Your Number in Line</strong>: {meeting.line_place + 1}</Card.Text>}
                 {notificationBlurb}
                 <Card.Text><strong>Time Joined</strong>: <DateTimeDisplay dateTime={props.queue.my_meeting!.created_at}/></Card.Text>
                 <Card.Text>

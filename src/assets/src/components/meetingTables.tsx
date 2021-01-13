@@ -81,40 +81,58 @@ interface UnstartedMeetingEditorProps extends MeetingEditorProps, AssigneeSelect
 
 function UnstartedMeetingEditor (props: UnstartedMeetingEditorProps) {
     const attendee = props.meeting.attendees[0];
+    if (!attendee) return (
+        <>
+        <td>No attendee</td>
+        <td></td>
+        <td>Invalid meeting ID: {props.meeting.id}</td>
+        <td></td>
+        </>
+    );
     const attendeeString = `${attendee.first_name} ${attendee.last_name}`;
+    const assignee = props.meeting.assignee;
 
-    const readyButton = props.meeting.assignee
-        && (
-            <Button
-                variant='success'
-                size='sm'
-                onClick={() => props.onStartMeeting(props.meeting)}
-                aria-label={`${props.meeting.backend_type === 'inperson' ? 'Ready for Attendee' : 'Create Meeting with'} ${attendeeString}`}
-                disabled={props.disabled}
-            >
-                {props.meeting.backend_type === 'inperson' ? 'Ready for Attendee' : 'Create Meeting'}
-            </Button>
-        );
-    const progressWorkflow = readyButton || <span>Please Assign Host</span>;
+    const removeButton = (
+        <RemoveButton
+            onRemove={() => props.onRemoveMeeting(props.meeting)}
+            size="sm"
+            screenReaderLabel={`Remove Meeting with ${attendeeString}`}
+            disabled={props.disabled}
+        />
+    );
+
+    const meetingActions = assignee?.id === props.user.id
+        ? (
+            <>
+            <Col lg={7} className='mb-1'>
+                <Button
+                    variant='success'
+                    size='sm'
+                    onClick={() => props.onStartMeeting(props.meeting)}
+                    aria-label={`${props.meeting.backend_type === 'inperson' ? 'Ready for Attendee' : 'Create Meeting with'} ${attendeeString}`}
+                    disabled={props.disabled}
+                >
+                    {props.meeting.backend_type === 'inperson' ? 'Ready for Attendee' : 'Create Meeting'}
+                </Button>
+            </Col>
+            <Col lg={5}>{removeButton}</Col>
+            </>
+        )
+        : assignee
+            ? <Col><span>Only the assigned host can use meeting actions.</span></Col>
+            : (
+                <>
+                <Col lg={7} className='mb-1'><span>Please assign host.</span></Col>
+                <Col lg={5}>{removeButton}</Col>
+                </>
+            );
 
     return (
         <>
         <td><UserDisplay user={attendee}/></td>
         <td><AssigneeSelector {...props} /></td>
         <td><MeetingDetails {...props} /></td>
-        <td>
-            <Row>
-                {progressWorkflow && <Col lg={7} className='mb-1'>{progressWorkflow}</Col>}
-                <Col lg={4}>
-                    <RemoveButton
-                        onRemove={() => props.onRemoveMeeting(props.meeting)}
-                        size="sm"
-                        screenReaderLabel={`Remove Meeting with ${attendeeString}`}
-                        disabled={props.disabled}
-                    />
-                </Col>
-            </Row>
-        </td>
+        <td><Row>{meetingActions}</Row></td>
         </>
     );
 }
@@ -122,8 +140,11 @@ function UnstartedMeetingEditor (props: UnstartedMeetingEditorProps) {
 function StartedMeetingEditor (props: MeetingEditorProps) {
     const attendee = props.meeting.attendees[0];
     const attendeeString = `${attendee.first_name} ${attendee.last_name}`;
-    const joinUrl = props.meeting.backend_metadata?.meeting_url;
-    const role = props.user.id === props.meeting.assignee!.id ? 'Host' : 'Guest';
+    const isHost = props.user.id === props.meeting.assignee!.id;
+    const joinUrl = isHost
+        ? props.meeting.backend_metadata?.host_meeting_url || props.meeting.backend_metadata?.meeting_url
+        : props.meeting.backend_metadata?.meeting_url;
+    const roleText = isHost ? 'Host' : 'Guest';
     const joinLink = joinUrl
         && (
             <Button
@@ -132,10 +153,10 @@ function StartedMeetingEditor (props: MeetingEditorProps) {
                 as='a'
                 href={joinUrl}
                 target="_blank"
-                aria-label={`Join Meeting as ${role} with ${attendeeString}`}
+                aria-label={`Join Meeting as ${roleText} with ${attendeeString}`}
                 disabled={props.disabled}
             >
-                Join Meeting as {role}
+                Join Meeting as {roleText}
             </Button>
         );
 
